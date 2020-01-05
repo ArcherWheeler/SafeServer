@@ -10,7 +10,7 @@
 
 module Main where
 
-import Policy 
+import Policy
 
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -28,6 +28,7 @@ import GHC.Generics
 import Network.Wai.Handler.Warp
 import PrivateServer
 import Network.HTTP.Types.Status
+import Data.Text.IO
 
 import qualified Data.ByteString.Lazy as BS
 
@@ -51,7 +52,7 @@ server tok = event tok :<|> count tok :<|> important tok
   where event :: Maybe String -> String -> Handler (SR Resp)
         event tok file = withPi tok $ do
           pi <- loadPi ("./data/" <> file <> ".txt")
-          let result = fmap Blob pi
+          let result = pmap pBlob pi
           return result
         
         count :: Maybe String -> Handler (SR Int)
@@ -59,13 +60,13 @@ server tok = event tok :<|> count tok :<|> important tok
           files <- listDirectory "./data"
           listOfPrivateInfo <- liftIO $ forM files (\fileName -> loadPi $ "./data/" <> fileName)
           let privateList = viewCollection listOfPrivateInfo
-          let result = fmap length privateList
+          let result = pmap pLength privateList
           return result 
         
         important :: Maybe String -> Handler (SR Resp)
         important tok = withPi tok $ do
           pi1 <- loadPi "./metadata/most_important.txt"
-          let file = fmap (\str -> "./data/" <> (T.unpack str) <> ".txt") pi1
+          let file = fmap (\str -> "./data/" <> T.unpack str <> ".txt") pi1
           pi2 <- reloadPi tok file
           let result = fmap Blob pi2
           return result

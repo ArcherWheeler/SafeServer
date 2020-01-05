@@ -13,6 +13,8 @@ module Policy
 ( API
 , MyPolicy
 , Resp(..)
+, pLength
+, pBlob
 ) where 
 
 import Servant
@@ -38,9 +40,12 @@ parseData fileContent =
                         (True, True) -> Just (l2 <> " " <> secretData)
                         _ -> Nothing
 
-data MyPolicy
-instance Policy MyPolicy where
+newtype Pol a = Pol a
+type MyPolicy = Pol ()
+
+instance Policy Pol where
     policy _ = parseData
+    unwrap (Pol a) = a
 
 -- API Definition --
 
@@ -53,3 +58,9 @@ type API = QueryParam "tok" String :>
         :<|> "count" :> GetPlainText MyPolicy Int
         :<|> "important" :> GetJSON MyPolicy Resp
     )
+
+pLength :: Pol ([a] -> Int)
+pLength = Pol length
+
+pBlob :: Pol (T.Text -> Resp)
+pBlob = Pol Blob

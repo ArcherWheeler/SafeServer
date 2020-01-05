@@ -22,6 +22,8 @@ module PrivateServer
 , viewCollection
 , view
 , noone
+, pmap
+, unwrap
 ) where
 import Network.HTTP.Types.Status
 
@@ -54,19 +56,16 @@ import qualified Data.ByteString.Lazy.Char8 as CH
 
 -- PI, Private Information Definitions --
 newtype PI p a = Box (T.Text -> Maybe a)
+type PIB p a = PI (p ()) a
 
 debug :: T.Text -> PI p a -> a
 debug tok (Box eval) = fromJust $ eval tok
 
 instance Functor (PI p) where
-    fmap fnc (Box eval) = 
-        let newEval tok = case eval tok of 
-                Just x -> Just (fnc x)
-                Nothing -> Nothing
-        in Box newEval
+    fmap = liftM
 
 instance Applicative (PI p) where
-    pure x = Box (\k -> Just x)
+    pure _ = noone
     (<*>) = ap
 
 instance Monad (PI p) where 
@@ -93,17 +92,24 @@ viewCollection collection = Box (\key -> Just $ mmapMaybe (\(Box eval) -> eval k
 
 class Policy p where
     policy :: Proxy p -> T.Text -> (T.Text -> Maybe T.Text)
+    unwrap :: p a -> a
 
-    load :: Proxy p -> FilePath -> IO (PI p T.Text)
-    load prx file = do
-        rawFile <- Data.Text.IO.readFile file
-        return $ Box (policy prx rawFile)
+pmap :: Policy p => p (a -> b) -> PIB p a -> PIB p b
+pmap comb (Box eval) =
+    Box $ \key -> case eval key of
+                                        Just x -> Just $ unwrap comb x
+                                        Nothing -> Nothing
 
-    reload :: Proxy p -> T.Text -> PI p FilePath -> IO (PI p T.Text)
-    reload prx key (Box eval) = 
-        case eval key of 
-            Just file -> load prx file
-            Nothing -> return $ Box (const Nothing)
+load :: Policy p => Proxy p -> FilePath -> IO (PIB p T.Text)
+load prx file = do
+    rawFile <- Data.Text.IO.readFile file
+    return $ Box (policy prx rawFile)
+
+reload :: Policy p => Proxy p -> T.Text -> PIB p FilePath -> IO (PIB p T.Text)
+reload prx key (Box eval) = 
+    case eval key of 
+        Just file -> load prx file
+        Nothing -> return $ Box (const Nothing)
 
 -- Servant Server Code --
 
